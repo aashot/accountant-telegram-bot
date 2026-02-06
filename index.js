@@ -106,6 +106,20 @@ bot.on('channel_post', msg => {
 
   const text = msg.text.trim();
 
+  // Handle /help command
+  if (/^\/help(@\w+)?$/i.test(text)) {
+    const helpText = `📋 *Available Commands*
+
+/total - Show today's spendings
+/monthly-total - Show this month's spendings
+/help - Show this help message
+
+📝 *How to record spendings:*
+Just type: \`Category Amount\`
+Examples: \`Lunch 345\` or \`Coffee 1,000\``;
+    return bot.sendMessage(channelId, helpText, { parse_mode: 'Markdown' });
+  }
+
   // Handle /total command - daily summary
   if (/^\/total(@\w+)?$/i.test(text)) {
     return bot.sendMessage(channelId, getDailySummary());
