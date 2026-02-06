@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const schedule = require('node-schedule');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 require('dotenv').config();
 
 const token = process.env.TELEGRAM_TOKEN;
@@ -145,4 +146,11 @@ schedule.scheduleJob({ tz: 'Asia/Dubai', hour: 23, minute: 50, date: 'L' }, () =
   bot.sendMessage(channelId, getMonthlySummary());
 });
 
-console.log('🚀 Bot running. Channel:', channelId);
+/* ─── HTTP server for Render health check ───────────────────────── */
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot is running');
+}).listen(PORT, () => {
+  console.log(`🚀 Bot running. Channel: ${channelId}, Health check on port ${PORT}`);
+});
