@@ -140,7 +140,6 @@ Examples: \`Lunch 345\` or \`Coffee 1,000\``;
   if (Number.isNaN(amount) || amount <= 0) return;
 
   add(category, amount);
-  bot.sendMessage(channelId, `✔️ ${category}: ${amount.toLocaleString()}`);
 });
 
 /* ─── reminder at 23:00 if no spendings ─────────────────────────── */
