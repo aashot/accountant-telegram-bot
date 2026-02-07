@@ -64,7 +64,7 @@ The bot tracks it immediately.
 
 | Command | Description |
 |---------|-------------|
-| `/total` | Show summary for **Today**. |
+| `/total` | Show today's summary in **table format** + downloadable **CSV file**. |
 | `/monthly-total` | Show summary for the **Current Month**. |
 | `/reset-day` | **Wipe today's data**. <br>• Asks for confirmation (Yes/No).<br>• Deletes all spending messages from the channel.<br>• Clears data from JSON. |
 | `/help` | Show available commands and tips. |
