@@ -5,7 +5,8 @@ const { getDailySummary, getMonthlySummary, hasTodaySpendings } = require('./spe
 function setupScheduler() {
   schedule.scheduleJob({ tz: 'Asia/Dubai', hour: 23, minute: 0 }, async () => {
     try {
-      if (!hasTodaySpendings()) {
+      const hasSpendings = await hasTodaySpendings();
+      if (!hasSpendings) {
         await bot.sendMessage(channelId, '⏰ Reminder: Please report your spendings for today!');
       }
     } catch (error) {
@@ -15,7 +16,8 @@ function setupScheduler() {
 
   schedule.scheduleJob({ tz: 'Asia/Dubai', hour: 23, minute: 55 }, async () => {
     try {
-      await bot.sendMessage(channelId, getDailySummary());
+      const summary = await getDailySummary();
+      await bot.sendMessage(channelId, summary);
     } catch (error) {
       console.error('Scheduler: Failed to send daily summary:', error.message);
     }
@@ -23,7 +25,8 @@ function setupScheduler() {
 
   schedule.scheduleJob({ tz: 'Asia/Dubai', hour: 23, minute: 50, date: 'L' }, async () => {
     try {
-      await bot.sendMessage(channelId, getMonthlySummary());
+      const summary = await getMonthlySummary();
+      await bot.sendMessage(channelId, summary);
     } catch (error) {
       console.error('Scheduler: Failed to send monthly summary:', error.message);
     }

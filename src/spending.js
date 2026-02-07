@@ -1,32 +1,30 @@
 const { bot, channelId } = require('./config');
-const { loadData, saveData } = require('./data');
+const { getSpendings } = require('./database');
 const { getToday, getCurrentMonth, getDateFromTimestamp } = require('./helpers');
 
 /**
  * Add a spending record.
- * @param {string} category - Spending category
- * @param {number} amount - Amount spent (in AMD)
- * @param {number} messageId - Telegram message ID
- * @param {number} [messageDate] - Unix timestamp from the Telegram message (optional)
- * @param {Object} [currencyInfo] - Original currency info if converted
- * @param {number} [currencyInfo.originalAmount] - Original amount before conversion
- * @param {string} [currencyInfo.originalCurrency] - Original currency code
- * @param {number} [currencyInfo.rate] - Exchange rate used
+ * @param {string} customDate - Optional custom date (YYYY-MM-DD) for past entries
  */
-function add(category, amount, messageId, messageDate, currencyInfo = null) {
-  const data = loadData();
+async function add(category, amount, messageId, messageDate, currencyInfo = null, customDate = null) {
+  const spendings = getSpendings();
+  const date = customDate || (messageDate ? getDateFromTimestamp(messageDate) : getToday());
 
-  if (messageId && data.monthly.some(e => e.messageId === messageId)) {
-    console.log(`[SKIP] Duplicate messageId ${messageId} for ${category}`);
-    return;
+  if (messageId) {
+    const existing = await spendings.findOne({ messageId });
+    if (existing) {
+      console.log(`[SKIP] Duplicate messageId ${messageId} for ${category}`);
+      return;
+    }
   }
 
-  const date = messageDate ? getDateFromTimestamp(messageDate) : getToday();
-
-  if (!data.daily[date]) data.daily[date] = {};
-  data.daily[date][category] = (data.daily[date][category] || 0) + amount;
-
-  const entry = { date, category, amount, messageId };
+  const entry = {
+    date,
+    category,
+    amount,
+    messageId,
+    createdAt: new Date()
+  };
 
   if (currencyInfo && currencyInfo.originalCurrency !== 'AMD') {
     entry.originalAmount = currencyInfo.originalAmount;
@@ -34,115 +32,76 @@ function add(category, amount, messageId, messageDate, currencyInfo = null) {
     entry.exchangeRate = currencyInfo.rate;
   }
 
-  data.monthly.push(entry);
-
-  saveData(data);
+  await spendings.insertOne(entry);
   console.log(`[ADDED] ${category}: ${amount} AMD (messageId: ${messageId}, date: ${date})`);
 }
 
-function updateSpending(messageId, newCategory, newAmount, currencyInfo = null) {
-  const data = loadData();
-  const entry = data.monthly.find(e => e.messageId === messageId);
+async function updateSpending(messageId, newCategory, newAmount, currencyInfo = null) {
+  const spendings = getSpendings();
+  const entry = await spendings.findOne({ messageId });
 
   if (!entry) return false;
 
-  const oldDate = entry.date;
-  const oldCategory = entry.category;
-  const oldAmount = entry.amount;
-
-  if (data.daily[oldDate] && data.daily[oldDate][oldCategory]) {
-    data.daily[oldDate][oldCategory] -= oldAmount;
-
-    if (data.daily[oldDate][oldCategory] <= 0) {
-      delete data.daily[oldDate][oldCategory];
-    }
-    if (Object.keys(data.daily[oldDate]).length === 0) {
-      delete data.daily[oldDate];
-    }
-  }
-
-  if (!data.daily[oldDate]) data.daily[oldDate] = {};
-  data.daily[oldDate][newCategory] = (data.daily[oldDate][newCategory] || 0) + newAmount;
-
-  entry.category = newCategory;
-  entry.amount = newAmount;
+  const updateData = {
+    category: newCategory,
+    amount: newAmount
+  };
 
   if (currencyInfo && currencyInfo.originalCurrency !== 'AMD') {
-    entry.originalAmount = currencyInfo.originalAmount;
-    entry.originalCurrency = currencyInfo.originalCurrency;
-    entry.exchangeRate = currencyInfo.rate;
+    updateData.originalAmount = currencyInfo.originalAmount;
+    updateData.originalCurrency = currencyInfo.originalCurrency;
+    updateData.exchangeRate = currencyInfo.rate;
   } else {
-    delete entry.originalAmount;
-    delete entry.originalCurrency;
-    delete entry.exchangeRate;
+    updateData.originalAmount = null;
+    updateData.originalCurrency = null;
+    updateData.exchangeRate = null;
   }
 
-  saveData(data);
+  await spendings.updateOne({ messageId }, { $set: updateData });
   return true;
 }
 
-function removeSpending(messageId) {
-  const data = loadData();
-  const entryIndex = data.monthly.findIndex(e => e.messageId === messageId);
-
-  if (entryIndex === -1) return false;
-
-  const entry = data.monthly[entryIndex];
-
-  if (data.daily[entry.date] && data.daily[entry.date][entry.category]) {
-    data.daily[entry.date][entry.category] -= entry.amount;
-    if (data.daily[entry.date][entry.category] <= 0) {
-      delete data.daily[entry.date][entry.category];
-    }
-    if (Object.keys(data.daily[entry.date]).length === 0) {
-      delete data.daily[entry.date];
-    }
-  }
-
-  data.monthly.splice(entryIndex, 1);
-
-  saveData(data);
-  return true;
+async function removeSpending(messageId) {
+  const spendings = getSpendings();
+  const result = await spendings.deleteOne({ messageId });
+  return result.deletedCount > 0;
 }
 
 async function resetDay() {
-  const data = loadData();
+  const spendings = getSpendings();
   const today = getToday();
 
-  const todayMessageIds = data.monthly
-    .filter(e => e.date === today && e.messageId)
-    .map(e => e.messageId);
+  const todayEntries = await spendings.find({ date: today, messageId: { $ne: null } }).toArray();
+  const messageIds = todayEntries.map(e => e.messageId);
 
-  const deletePromises = todayMessageIds.map(msgId =>
+  const deletePromises = messageIds.map(msgId =>
     bot.deleteMessage(channelId, msgId).catch(err => {
       console.log(`Could not delete message ${msgId}: ${err.message}`);
     })
   );
   await Promise.all(deletePromises);
 
-  delete data.daily[today];
-  data.monthly = data.monthly.filter(e => e.date !== today);
+  await spendings.deleteMany({ date: today });
 
-  saveData(data);
-
-  return todayMessageIds.length;
+  return messageIds.length;
 }
 
-function getDailyData() {
-  const data = loadData();
+async function getDailyData() {
+  const spendings = getSpendings();
   const today = getToday();
-  const todayData = data.daily[today];
+  const todayEntries = await spendings.find({ date: today }).toArray();
 
-  if (!todayData || !Object.keys(todayData).length) {
+  if (!todayEntries.length) {
     return null;
   }
 
-  const todayEntries = data.monthly.filter(e => e.date === today);
-
+  const categoryTotals = {};
   const categoryDetails = {};
   const totalOriginalsByCurrency = {};
 
   todayEntries.forEach(entry => {
+    categoryTotals[entry.category] = (categoryTotals[entry.category] || 0) + entry.amount;
+
     if (!categoryDetails[entry.category]) {
       categoryDetails[entry.category] = [];
     }
@@ -160,7 +119,7 @@ function getDailyData() {
     }
   });
 
-  const entries = Object.entries(todayData)
+  const entries = Object.entries(categoryTotals)
     .map(([category, amount]) => {
       const details = categoryDetails[category] || [];
       const foreignEntries = details.filter(d => d.originalCurrency && d.originalCurrency !== 'AMD');
@@ -195,8 +154,8 @@ function getDailyData() {
   return { entries, total, date: today, totalOriginalsInfo };
 }
 
-function getDailySummary() {
-  const dailyData = getDailyData();
+async function getDailySummary() {
+  const dailyData = await getDailyData();
 
   if (!dailyData) {
     return '🕛 No spendings recorded today.';
@@ -221,8 +180,8 @@ function getDailySummary() {
   return header + tableHeader + separator + rows + totalRow;
 }
 
-function getDailyCsv() {
-  const dailyData = getDailyData();
+async function getDailyCsv() {
+  const dailyData = await getDailyData();
 
   if (!dailyData) {
     return null;
@@ -253,9 +212,9 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function getMonthlySummary(month = getCurrentMonth()) {
-  const data = loadData();
-  const monthlyEntries = data.monthly.filter(e => e.date.startsWith(month));
+async function getMonthlySummary(month = getCurrentMonth()) {
+  const spendings = getSpendings();
+  const monthlyEntries = await spendings.find({ date: { $regex: `^${month}` } }).toArray();
 
   if (!monthlyEntries.length) {
     return `📊 No spendings recorded for ${month}.`;
@@ -310,10 +269,11 @@ function getMonthlySummary(month = getCurrentMonth()) {
   return lines.join('\n');
 }
 
-function hasTodaySpendings() {
-  const data = loadData();
+async function hasTodaySpendings() {
+  const spendings = getSpendings();
   const today = getToday();
-  return data.daily[today] && Object.keys(data.daily[today]).length > 0;
+  const count = await spendings.countDocuments({ date: today });
+  return count > 0;
 }
 
 module.exports = {
