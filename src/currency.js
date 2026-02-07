@@ -40,7 +40,13 @@ async function getExchangeRate(fromCurrency) {
       throw new Error(`API responded with status ${response.status}`);
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error(`Failed to parse API response: ${parseError.message}`);
+    }
+
     const rate = data[currency]?.[HOME_CURRENCY];
 
     if (!rate) {
@@ -62,7 +68,13 @@ async function getExchangeRate(fromCurrency) {
         throw new Error(`Fallback API responded with status ${response.status}`);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw new Error(`Failed to parse fallback API response: ${parseError.message}`);
+      }
+
       const rate = data[currency]?.[HOME_CURRENCY];
 
       if (rate) {
