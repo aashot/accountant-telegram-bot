@@ -14,15 +14,14 @@ process.on('uncaughtException', (error) => {
 
 const token = process.env.TELEGRAM_TOKEN;
 const channelId = process.env.TELEGRAM_CHANNEL_ID;
+const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://accountant-telegram-bot.onrender.com';
 
 if (!token || !channelId) {
   console.error('❌ Set TELEGRAM_TOKEN and TELEGRAM_CHANNEL_ID in .env');
   process.exit(1);
 }
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { webHook: true });
 const DATA_FILE = path.join(__dirname, '..', 'data.json');
 
-bot.on('polling_error', e => console.error('polling_error:', e.message));
-
-module.exports = { bot, channelId, DATA_FILE };
+module.exports = { bot, channelId, DATA_FILE, token, WEBHOOK_URL };

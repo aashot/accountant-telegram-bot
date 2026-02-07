@@ -1,0 +1,1 @@
+1. include the convertion rate in the every spending and every summary
