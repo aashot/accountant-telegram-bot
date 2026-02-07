@@ -97,21 +97,65 @@ async function resetDay() {
   return todayMessageIds.length;
 }
 
-function getDailySummary() {
+function getDailyData() {
   const data = loadData();
   const today = getToday();
   const todayData = data.daily[today];
 
   if (!todayData || !Object.keys(todayData).length) {
+    return null;
+  }
+
+  const entries = Object.entries(todayData)
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const total = entries.reduce((sum, e) => sum + e.amount, 0);
+
+  return { entries, total, date: today };
+}
+
+function getDailySummary() {
+  const dailyData = getDailyData();
+
+  if (!dailyData) {
     return '🕛 No spendings recorded today.';
   }
 
-  const lines = Object.entries(todayData)
-    .map(([cat, amt]) => `• ${cat}: ${amt.toLocaleString()}`);
-  const total = Object.values(todayData).reduce((sum, amt) => sum + amt, 0);
-  lines.push(`\n💰 Total: ${total.toLocaleString()}`);
+  const header = `📊 *Spendings for ${dailyData.date}*\n\n`;
+  const tableHeader = '```\n' + padRight('Category', 20) + padRight('Amount', 12) + '\n';
+  const separator = '-'.repeat(32) + '\n';
 
-  return lines.join('\n');
+  const rows = dailyData.entries
+    .map(e => padRight(capitalize(e.category), 20) + padRight(e.amount.toLocaleString(), 12))
+    .join('\n');
+
+  const totalRow = '\n' + separator + padRight('TOTAL', 20) + padRight(dailyData.total.toLocaleString(), 12) + '```';
+
+  return header + tableHeader + separator + rows + totalRow;
+}
+
+function getDailyCsv() {
+  const dailyData = getDailyData();
+
+  if (!dailyData) {
+    return null;
+  }
+
+  const header = 'Category,Amount';
+  const rows = dailyData.entries
+    .map(e => `"${capitalize(e.category)}",${e.amount}`);
+  rows.push(`"TOTAL",${dailyData.total}`);
+
+  return [header, ...rows].join('\n');
+}
+
+function padRight(str, len) {
+  return String(str).padEnd(len);
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function getMonthlySummary(month = getCurrentMonth()) {
@@ -150,6 +194,8 @@ module.exports = {
   removeSpending,
   resetDay,
   getDailySummary,
+  getDailyCsv,
+  getDailyData,
   getMonthlySummary,
   hasTodaySpendings
 };

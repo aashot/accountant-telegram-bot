@@ -1,11 +1,12 @@
 const { bot, channelId } = require('./config');
-const { parseSpending } = require('./helpers');
+const { parseSpending, getToday } = require('./helpers');
 const {
   add,
   updateSpending,
   removeSpending,
   resetDay,
   getDailySummary,
+  getDailyCsv,
   getMonthlySummary
 } = require('./spending');
 
@@ -34,7 +35,19 @@ function setupHandlers() {
     }
 
     if (/^\/total(@\w+)?$/i.test(text)) {
-      return bot.sendMessage(channelId, getDailySummary());
+      const tableMessage = getDailySummary();
+      await bot.sendMessage(channelId, tableMessage, { parse_mode: 'Markdown' });
+
+      const csvContent = getDailyCsv();
+      if (csvContent) {
+        const today = getToday();
+        const csvBuffer = Buffer.from(csvContent, 'utf8');
+        await bot.sendDocument(channelId, csvBuffer, {}, {
+          filename: `spendings_${today}.csv`,
+          contentType: 'text/csv'
+        });
+      }
+      return;
     }
 
     if (/^\/monthly-total(@\w+)?$/i.test(text)) {
