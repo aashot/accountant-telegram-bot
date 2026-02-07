@@ -14,7 +14,7 @@ const {
 
 const HELP_TEXT = `📋 *Available Commands*
 
-/total - Show today's spendings (table + CSV)
+/total \\[YYYY-MM-DD\\] - Show spendings (today or specific date)
 /monthly-total - Show this month's spendings
 /reset-day - Reset all today's spendings
 /add-past - Add spending for a past date
@@ -57,16 +57,18 @@ function setupHandlers() {
         return bot.sendMessage(channelId, HELP_TEXT, { parse_mode: 'Markdown' });
       }
 
-      if (/^\/total(@\w+)?$/i.test(text)) {
-        const tableMessage = await getDailySummary();
+      const totalMatch = text.match(/^\/total(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?$/i);
+      if (totalMatch) {
+        const targetDate = totalMatch[1] || null;
+        const tableMessage = await getDailySummary(targetDate);
         await bot.sendMessage(channelId, tableMessage, { parse_mode: 'Markdown' });
 
-        const csvContent = await getDailyCsv();
+        const csvContent = await getDailyCsv(targetDate);
         if (csvContent) {
-          const today = getToday();
+          const dateForFilename = targetDate || getToday();
           const csvBuffer = Buffer.from(csvContent, 'utf8');
           await bot.sendDocument(channelId, csvBuffer, {}, {
-            filename: `spendings_${today}.csv`,
+            filename: `spendings_${dateForFilename}.csv`,
             contentType: 'text/csv'
           });
         }

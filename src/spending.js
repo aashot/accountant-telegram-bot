@@ -105,12 +105,12 @@ async function resetDay() {
   return uniqueMessageIds.length;
 }
 
-async function getDailyData() {
+async function getDailyData(targetDate = null) {
   const spendings = getSpendings();
-  const today = getToday();
-  const todayEntries = await spendings.find({ date: today }).toArray();
+  const date = targetDate || getToday();
+  const dbEntries = await spendings.find({ date }).toArray();
 
-  if (!todayEntries.length) {
+  if (!dbEntries.length) {
     return null;
   }
 
@@ -118,7 +118,7 @@ async function getDailyData() {
   const categoryDetails = {};
   const totalOriginalsByCurrency = {};
 
-  todayEntries.forEach(entry => {
+  dbEntries.forEach(entry => {
     categoryTotals[entry.category] = (categoryTotals[entry.category] || 0) + entry.amount;
 
     if (!categoryDetails[entry.category]) {
@@ -138,7 +138,7 @@ async function getDailyData() {
     }
   });
 
-  const entries = Object.entries(categoryTotals)
+  const sortedEntries = Object.entries(categoryTotals)
     .map(([category, amount]) => {
       const details = categoryDetails[category] || [];
       const foreignEntries = details.filter(d => d.originalCurrency && d.originalCurrency !== 'AMD');
@@ -161,7 +161,7 @@ async function getDailyData() {
     })
     .sort((a, b) => b.amount - a.amount);
 
-  const total = entries.reduce((sum, e) => sum + e.amount, 0);
+  const total = sortedEntries.reduce((sum, e) => sum + e.amount, 0);
 
   let totalOriginalsInfo = null;
   if (Object.keys(totalOriginalsByCurrency).length > 0) {
@@ -170,14 +170,15 @@ async function getDailyData() {
       .join(' + ');
   }
 
-  return { entries, total, date: today, totalOriginalsInfo };
+  return { entries: sortedEntries, total, date, totalOriginalsInfo };
 }
 
-async function getDailySummary() {
-  const dailyData = await getDailyData();
+async function getDailySummary(targetDate = null) {
+  const dailyData = await getDailyData(targetDate);
 
   if (!dailyData) {
-    return '🕛 No spendings recorded today.';
+    const dateStr = targetDate || getToday();
+    return `🕛 No spendings recorded for ${dateStr}.`;
   }
 
   const header = `📊 *Spendings for ${dailyData.date}*\n\n`;
@@ -199,8 +200,8 @@ async function getDailySummary() {
   return header + tableHeader + separator + rows + totalRow;
 }
 
-async function getDailyCsv() {
-  const dailyData = await getDailyData();
+async function getDailyCsv(targetDate = null) {
+  const dailyData = await getDailyData(targetDate);
 
   if (!dailyData) {
     return null;
