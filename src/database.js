@@ -27,12 +27,11 @@ async function connect(retries = 3) {
       await client.connect();
       db = client.db(DB_NAME);
 
-      // Drop old unique messageId index if it exists (it caused issues with null values)
       try {
         await db.collection('spendings').dropIndex('messageId_1');
         console.log('🗑️ Dropped old messageId_1 index');
       } catch (e) {
-        // Index might not exist, ignore
+        console.log('Index might not exist, ignore', e);
       }
 
       await db.collection('spendings').createIndex({ messageId: 1, lineIndex: 1 }, { sparse: true });

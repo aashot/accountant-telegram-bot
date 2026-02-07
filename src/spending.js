@@ -29,8 +29,6 @@ async function add(category, amount, messageId, messageDate, currencyInfo = null
     createdAt: new Date()
   };
 
-  // Only include messageId and lineIndex if they have actual values
-  // This allows the sparse index to work correctly for past entries
   if (messageId !== null) {
     entry.messageId = messageId;
   }
