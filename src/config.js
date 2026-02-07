@@ -2,6 +2,16 @@ const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
 require('dotenv').config();
 
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason instanceof Error ? reason.message : String(reason));
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error.message);
+  process.exit(1);
+});
+
 const token = process.env.TELEGRAM_TOKEN;
 const channelId = process.env.TELEGRAM_CHANNEL_ID;
 
