@@ -1,20 +1,27 @@
 const { bot, channelId } = require('./config');
 const { loadData, saveData } = require('./data');
-const { getToday, getCurrentMonth } = require('./helpers');
+const { getToday, getCurrentMonth, getDateFromTimestamp } = require('./helpers');
 
-function add(category, amount, messageId) {
+/**
+ * Add a spending record.
+ * @param {string} category - Spending category
+ * @param {number} amount - Amount spent
+ * @param {number} messageId - Telegram message ID
+ * @param {number} [messageDate] - Unix timestamp from the Telegram message (optional)
+ */
+function add(category, amount, messageId, messageDate) {
   const data = loadData();
 
   if (messageId && data.monthly.some(e => e.messageId === messageId)) {
     return;
   }
 
-  const today = getToday();
+  const date = messageDate ? getDateFromTimestamp(messageDate) : getToday();
 
-  if (!data.daily[today]) data.daily[today] = {};
-  data.daily[today][category] = (data.daily[today][category] || 0) + amount;
+  if (!data.daily[date]) data.daily[date] = {};
+  data.daily[date][category] = (data.daily[date][category] || 0) + amount;
 
-  data.monthly.push({ date: today, category, amount, messageId });
+  data.monthly.push({ date, category, amount, messageId });
 
   saveData(data);
 }

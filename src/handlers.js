@@ -71,7 +71,7 @@ function setupHandlers() {
 
     const spending = parseSpending(text);
     if (spending) {
-      add(spending.category, spending.amount, msg.message_id);
+      add(spending.category, spending.amount, msg.message_id, msg.date);
     }
   });
 
@@ -108,7 +108,7 @@ function setupHandlers() {
     const updated = updateSpending(msg.message_id, spending.category, spending.amount);
 
     if (!updated) {
-      add(spending.category, spending.amount, msg.message_id);
+      add(spending.category, spending.amount, msg.message_id, msg.date);
     }
   });
 }

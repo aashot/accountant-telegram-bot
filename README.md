@@ -14,7 +14,7 @@ A simple yet powerful Telegram bot for tracking daily expenses directly from a T
   - Daily summary at 23:55.
   - Monthly summary on the last day of the month.
   - Reminder at 23:00 if no spendings were logged.
-- **🌍 Timezone Aware**: Configured for `Asia/Dubai` time.
+- **🌍 Timezone Aware**: Uses message timestamps for accurate date tracking.
 
 ## 🚀 Setup
 
@@ -85,7 +85,7 @@ Since Telegram bots cannot detect when you *manually delete* a message, we use a
 ## ⚙️ Technical Details
 
 - **Data Storage**: Data is stored locally in `data.json`.
-- **Timezone**: Hardcoded to `Asia/Dubai` for all reports and date logic.
+- **Timezone**: Dates are derived from Telegram message timestamps, using the server's local timezone. Set the `TZ` environment variable to match your channel members' timezone (e.g., `TZ=Asia/Bangkok`).
 - **Health Check**: Runs a simple HTTP server on port 3000 (useful for hosting on Render/Heroku).
 
 ## 🕒 Schedule
