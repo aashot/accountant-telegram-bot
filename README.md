@@ -5,6 +5,7 @@ A Telegram bot for tracking daily expenses in a channel. Supports multiple curre
 ## ✨ Features
 
 - **📝 Easy Logging**: Type `Category Amount` (e.g., `Lunch 150`) or `Category Amount Currency` (e.g., `Coffee 5 USD`)
+- **📋 Multi-Line**: Record multiple expenses in one message (one per line)
 - **💱 Multi-Currency**: 300+ currencies supported (fiat, crypto, metals) with real-time conversion to AMD
 - **🔄 Sync on Edit**: Editing a message automatically updates the database
 - **🗑️ Smart Deletion**: Edit to invalid text (e.g., `-`) to remove entry and message
@@ -68,6 +69,7 @@ npm run dev    # Development (with hot reload)
 
 ## 📝 Recording Expenses
 
+**Single expense:**
 ```
 Category Amount [Currency]
 ```
@@ -78,6 +80,20 @@ Category Amount [Currency]
 | `Coffee 5 USD` | ~2,050 AMD |
 | `Taxi 1,000` | 1,000 AMD |
 | `Crypto 0.001 BTC` | ~40,000 AMD |
+
+**Multiple expenses in one message:**
+```
+Coffee 500
+Lunch 3500
+Transport 10 USD
+```
+
+**Add past expenses (multi-line):**
+```
+/add-past 2026-02-07
+Coffee 500
+Lunch 1500 USD
+```
 
 ## ✏️ Editing & Deleting
 
