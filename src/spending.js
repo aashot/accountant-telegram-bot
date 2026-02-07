@@ -208,13 +208,13 @@ function getDailySummary() {
 
   const rows = dailyData.entries
     .map(e => {
-      const conversion = e.originalInfo ? `${e.originalInfo} → ${e.amount.toLocaleString()}` : '';
+      const conversion = e.originalInfo ? `${e.originalInfo} → ${e.amount.toLocaleString()} AMD` : '';
       return padRight(capitalize(e.category), 14) + padRight(e.amount.toLocaleString(), 12) + conversion;
     })
     .join('\n');
 
   const totalConversion = dailyData.totalOriginalsInfo
-    ? `${dailyData.totalOriginalsInfo} → ${dailyData.total.toLocaleString()}`
+    ? `${dailyData.totalOriginalsInfo} → ${dailyData.total.toLocaleString()} AMD`
     : '';
   const totalRow = '\n' + separator + padRight('TOTAL', 14) + padRight(dailyData.total.toLocaleString(), 12) + totalConversion + '```';
 
@@ -236,7 +236,11 @@ function getDailyCsv() {
       const conversion = e.originalInfo ? `${e.originalInfo} → ${e.amount.toLocaleString()} AMD` : '';
       return `"${capitalize(e.category)}",${e.amount},"${origAmt}","${origCur}","${conversion}"`;
     });
-  rows.push(`"TOTAL",${dailyData.total},"","",""`);
+
+  const totalConversion = dailyData.totalOriginalsInfo
+    ? `${dailyData.totalOriginalsInfo} → ${dailyData.total.toLocaleString()} AMD`
+    : '';
+  rows.push(`"TOTAL",${dailyData.total},"","","${totalConversion}"`);
 
   return [header, ...rows].join('\n');
 }
