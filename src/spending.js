@@ -17,6 +17,7 @@ function add(category, amount, messageId, messageDate, currencyInfo = null) {
   const data = loadData();
 
   if (messageId && data.monthly.some(e => e.messageId === messageId)) {
+    console.log(`[SKIP] Duplicate messageId ${messageId} for ${category}`);
     return;
   }
 
@@ -36,6 +37,7 @@ function add(category, amount, messageId, messageDate, currencyInfo = null) {
   data.monthly.push(entry);
 
   saveData(data);
+  console.log(`[ADDED] ${category}: ${amount} AMD (messageId: ${messageId}, date: ${date})`);
 }
 
 function updateSpending(messageId, newCategory, newAmount, currencyInfo = null) {
@@ -185,13 +187,13 @@ function getDailySummary() {
   }
 
   const header = `📊 *Spendings for ${dailyData.date}*\n\n`;
-  const tableHeader = '```\n' + padRight('Category', 20) + padRight('Amount (AMD)', 15) + 'Original\n';
+  const tableHeader = '```\n' + padRight('Category', 14) + padRight('AMD', 12) + 'Conversion\n';
   const separator = '-'.repeat(50) + '\n';
 
   const rows = dailyData.entries
     .map(e => {
-      const original = e.originalInfo ? `(${e.originalInfo})` : '';
-      return padRight(capitalize(e.category), 20) + padRight(e.amount.toLocaleString(), 15) + original;
+      const conversion = e.originalInfo ? `${e.originalInfo} → ${e.amount.toLocaleString()}` : '';
+      return padRight(capitalize(e.category), 14) + padRight(e.amount.toLocaleString(), 12) + conversion;
     })
     .join('\n');
 
@@ -200,8 +202,8 @@ function getDailySummary() {
     .map(e => e.originalInfo)
     .join(' + ');
 
-  const totalOriginal = allOriginals ? `(${allOriginals})` : '';
-  const totalRow = '\n' + separator + padRight('TOTAL', 20) + padRight(dailyData.total.toLocaleString(), 15) + totalOriginal + '```';
+  const totalConversion = allOriginals ? `${allOriginals} → ${dailyData.total.toLocaleString()}` : '';
+  const totalRow = '\n' + separator + padRight('TOTAL', 14) + padRight(dailyData.total.toLocaleString(), 12) + totalConversion + '```';
 
   return header + tableHeader + separator + rows + totalRow;
 }
@@ -213,14 +215,15 @@ function getDailyCsv() {
     return null;
   }
 
-  const header = 'Category,Amount (AMD),Original Amount,Original Currency';
+  const header = 'Category,Amount AMD,Original Amount,Original Currency,Conversion';
   const rows = dailyData.entries
     .map(e => {
       const origAmt = e.originalInfo ? e.originalInfo.replace(/[^0-9,.+ ]/g, '').trim() : '';
       const origCur = e.originalInfo ? e.originalInfo.replace(/[0-9,.+ ]/g, '').trim() : '';
-      return `"${capitalize(e.category)}",${e.amount},"${origAmt}","${origCur}"`;
+      const conversion = e.originalInfo ? `${e.originalInfo} → ${e.amount.toLocaleString()} AMD` : '';
+      return `"${capitalize(e.category)}",${e.amount},"${origAmt}","${origCur}","${conversion}"`;
     });
-  rows.push(`"TOTAL",${dailyData.total},"",""`);
+  rows.push(`"TOTAL",${dailyData.total},"","",""`);
 
   return [header, ...rows].join('\n');
 }

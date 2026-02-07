@@ -81,11 +81,14 @@ function setupHandlers() {
 
     const spending = parseSpending(text);
     if (spending) {
+      console.log(`[PARSE] "${text}" -> category: ${spending.category}, amount: ${spending.amount}, currency: ${spending.currency}`);
+
       if (!isSupportedCurrency(spending.currency)) {
         return bot.sendMessage(channelId, `❌ Invalid currency code "${spending.currency}". Use a valid 3-letter code (USD, EUR, BTC, etc.)`, { reply_to_message_id: msg.message_id });
       }
 
       const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+      console.log(`[CONVERT] ${spending.amount} ${spending.currency} -> ${amountAMD} AMD (success: ${success})`);
 
       if (!success && spending.currency !== 'AMD') {
         return bot.sendMessage(channelId, `⚠️ Could not convert ${spending.currency}. Please try again later.`, { reply_to_message_id: msg.message_id });
