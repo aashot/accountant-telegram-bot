@@ -1,5 +1,6 @@
 const { bot, channelId } = require('./config');
 const { parseSpending, getToday } = require('./helpers');
+const { convertToAMD, isSupportedCurrency } = require('./currency');
 const {
   add,
   updateSpending,
@@ -12,17 +13,26 @@ const {
 
 const HELP_TEXT = `📋 *Available Commands*
 
-/total - Show today's spendings
+/total - Show today's spendings (table + CSV)
 /monthly-total - Show this month's spendings
-/reset-day - Reset all today's spendings and delete messages
+/reset-day - Reset all today's spendings
 /help - Show this help message
 
 📝 *How to record spendings:*
-Just type: \`Category Amount\`
-Examples: \`Lunch 345\` or \`Coffee 1,000\`
+\`Category Amount\` or \`Category Amount Currency\`
+Examples:
+• \`Lunch 345\` → 345 AMD
+• \`Coffee 5.50 USD\` → converted to AMD
+• \`Crypto 0.001 BTC\` → converted to AMD
+
+💱 *Currency Support:*
+300+ currencies supported (fiat, crypto, metals).
+Examples: USD, EUR, RUB, GEL, BTC, ETH, USDT, XAU...
+All amounts auto-convert to AMD.
 
 ✏️ *Edit/Delete:*
-Edit or delete your spending message to update the data.`;
+Edit a message to update the amount.
+Edit to invalid text (e.g., "-") to delete.`;
 
 function setupHandlers() {
   bot.on('channel_post', async msg => {
@@ -71,7 +81,25 @@ function setupHandlers() {
 
     const spending = parseSpending(text);
     if (spending) {
-      add(spending.category, spending.amount, msg.message_id, msg.date);
+      if (!isSupportedCurrency(spending.currency)) {
+        return bot.sendMessage(channelId, `❌ Invalid currency code "${spending.currency}". Use a valid 3-letter code (USD, EUR, BTC, etc.)`, { reply_to_message_id: msg.message_id });
+      }
+
+      const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+
+      if (!success && spending.currency !== 'AMD') {
+        return bot.sendMessage(channelId, `⚠️ Could not convert ${spending.currency}. Please try again later.`, { reply_to_message_id: msg.message_id });
+      }
+
+      add(spending.category, amountAMD, msg.message_id, msg.date, {
+        originalAmount: spending.amount,
+        originalCurrency: spending.currency,
+        rate
+      });
+
+      if (spending.currency !== 'AMD' && success) {
+        await bot.sendMessage(channelId, `💱 ${spending.amount.toLocaleString()} ${spending.currency} → ${amountAMD.toLocaleString()} AMD`, { reply_to_message_id: msg.message_id });
+      }
     }
   });
 
@@ -105,10 +133,28 @@ function setupHandlers() {
       return;
     }
 
-    const updated = updateSpending(msg.message_id, spending.category, spending.amount);
+    if (!isSupportedCurrency(spending.currency)) {
+      return;
+    }
+
+    const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+
+    if (!success && spending.currency !== 'AMD') {
+      return;
+    }
+
+    const updated = updateSpending(msg.message_id, spending.category, amountAMD, {
+      originalAmount: spending.amount,
+      originalCurrency: spending.currency,
+      rate
+    });
 
     if (!updated) {
-      add(spending.category, spending.amount, msg.message_id, msg.date);
+      add(spending.category, amountAMD, msg.message_id, msg.date, {
+        originalAmount: spending.amount,
+        originalCurrency: spending.currency,
+        rate
+      });
     }
   });
 }

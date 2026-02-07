@@ -1,95 +1,122 @@
 # 💰 Accountant Telegram Bot
 
-A simple yet powerful Telegram bot for tracking daily expenses directly from a Telegram channel. It supports natural language input, editing, automatic reporting, and data persistence.
+A Telegram bot for tracking daily expenses in a channel. Supports multiple currencies with automatic conversion to AMD (Armenian Dram).
 
 ## ✨ Features
 
-- **📝 Easy Logging**: Just type `Category Amount` (e.g., `Lunch 150`).
-- **🔄 Sync on Edit**: Editing a message automatically updates the database.
-- **🗑️ Smart Deletion**: 
-  - Edit a message to "invalid" text (e.g., "-") to remove it from the database.
-  - The bot automatically deletes the "removed" message from the channel for a clean history.
-- **⚡ /reset-day**: A command to wipe all today's data and auto-delete all spending messages.
-- **📊 Auto-Reports**: 
-  - Daily summary at 23:55.
-  - Monthly summary on the last day of the month.
-  - Reminder at 23:00 if no spendings were logged.
-- **🌍 Timezone Aware**: Uses message timestamps for accurate date tracking.
+- **📝 Easy Logging**: Type `Category Amount` (e.g., `Lunch 150`) or `Category Amount Currency` (e.g., `Coffee 5 USD`)
+- **💱 Multi-Currency**: 300+ currencies supported (fiat, crypto, metals) with real-time conversion to AMD
+- **🔄 Sync on Edit**: Editing a message automatically updates the database
+- **🗑️ Smart Deletion**: Edit to invalid text (e.g., `-`) to remove entry and message
+- **⚡ /reset-day**: Wipe today's data and delete all spending messages
+- **📊 Auto-Reports**: Daily summary at 23:55, monthly on last day, reminder at 23:00
+
+## 💱 Currency Support
+
+Supports **300+ currencies** including:
+- **Fiat**: USD, EUR, GBP, RUB, GEL, TRY, AED, CNY, JPY, VND, THB...
+- **Crypto**: BTC, ETH, USDT, SOL, BNB, XRP, DOGE...
+- **Metals**: XAU (gold), XAG (silver), XPT (platinum)
+
+**Examples:**
+```
+Lunch 345           → 345 AMD
+Coffee 5.50 USD     → ~2,255 AMD
+Dinner 10 EUR       → ~4,200 AMD
+Savings 0.001 BTC   → ~40,000 AMD
+```
+
+Powered by [fawazahmed0/exchange-api](https://github.com/fawazahmed0/exchange-api) (free, no rate limits).
 
 ## 🚀 Setup
 
 ### Prerequisites
-- Node.js installed.
-- A Telegram Bot Token (from [@BotFather](https://t.me/BotFather)).
-- A Telegram Channel (add the bot as an Admin with "Delete Messages" permission).
+- Node.js installed
+- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
+- Telegram Channel (add bot as Admin with "Delete Messages" permission)
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd accountant-telegram-bot
-   ```
+```bash
+git clone <repository-url>
+cd accountant-telegram-bot
+npm install
+```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### Configuration
+Create `.env` file:
+```env
+TELEGRAM_TOKEN=your_bot_token_here
+TELEGRAM_CHANNEL_ID=-100xxxxxxxxxx
+PORT=3000
+```
 
-3. **Configure Environment**
-   Create a `.env` file in the root directory:
-   ```env
-   TELEGRAM_TOKEN=your_bot_token_here
-   TELEGRAM_CHANNEL_ID=-100xxxxxxxxxx
-   PORT=3000
-   ```
-   *Tip: To get your Channel ID, forward a message from the channel to [@userinfobot](https://t.me/userinfobot).*
+### Run
+```bash
+npm start      # Production
+npm run dev    # Development (with hot reload)
+```
 
-4. **Run the Bot**
-   ```bash
-   npm start
-   ```
-
-## 📖 Usage Guide
-
-### 1. Recording Expenses
-Type the category followed by the amount in your channel.
-- `Lunch 50`
-- `Taxi 1,200`
-- `Groceries 35.50`
-
-The bot tracks it immediately.
-
-### 2. Commands
+## 📖 Commands
 
 | Command | Description |
 |---------|-------------|
-| `/total` | Show today's summary in **table format** + downloadable **CSV file**. |
-| `/monthly-total` | Show summary for the **Current Month**. |
-| `/reset-day` | **Wipe today's data**. <br>• Asks for confirmation (Yes/No).<br>• Deletes all spending messages from the channel.<br>• Clears data from JSON. |
-| `/help` | Show available commands and tips. |
+| `/total` | Today's summary (table + CSV file) |
+| `/monthly-total` | Current month's summary |
+| `/reset-day` | Wipe today's data (with confirmation) |
+| `/help` | Show help message |
 
-### 3. Editing & Deleting (Important!)
+## 📝 Recording Expenses
 
-Since Telegram bots cannot detect when you *manually delete* a message, we use an **Edit-based workflow**:
+```
+Category Amount [Currency]
+```
 
-- **To Fix a Typos:**
-  Simply **Edit** the message.
-  *Example:* Change `Lunch 500` to `Lunch 50`.
-  -> The bot detects the change, updates the total, and **preserves the original date**.
+| Input | Result |
+|-------|--------|
+| `Lunch 50` | 50 AMD |
+| `Coffee 5 USD` | ~2,050 AMD |
+| `Taxi 1,000` | 1,000 AMD |
+| `Crypto 0.001 BTC` | ~40,000 AMD |
 
-- **To Delete an Entry:**
-  **Edit** the message to anything invalid (e.g., `del`, `-`, or just empty text).
-  -> The bot will **remove the data** from the database AND **delete the message** from the channel automatically.
+## ✏️ Editing & Deleting
+
+- **Fix typo**: Edit the message → data updates automatically
+- **Delete entry**: Edit to `-` or invalid text → removes from database and deletes message
+
+## 📊 Reports
+
+**Daily (`/total`)**:
+```
+📊 Spendings for 2026-02-07
+
+Category            Amount (AMD)   Original
+--------------------------------------------------
+Coffee              2,050          (5 USD)
+Lunch               4,200          (10 EUR)
+Bread               500            
+--------------------------------------------------
+TOTAL               6,750          (5 USD + 10 EUR)
+```
+
+**Monthly (`/monthly-total`)**:
+```
+📊 Monthly Report: 2026-02
+• Coffee: 8,200 AMD (10 USD + 5 EUR)
+• Lunch: 4,200 AMD (10 EUR)
+
+💰 Total: 12,400 AMD (10 USD + 15 EUR)
+```
 
 ## ⚙️ Technical Details
 
-- **Data Storage**: Data is stored locally in `data.json`.
-- **Timezone**: Dates are derived from Telegram message timestamps, using the server's local timezone. Set the `TZ` environment variable to match your channel members' timezone (e.g., `TZ=Asia/Bangkok`).
-- **Health Check**: Runs a simple HTTP server on port 3000 (useful for hosting on Render/Heroku).
+- **Data Storage**: `data.json` (local file)
+- **Timezone**: Uses message timestamps; set `TZ` env variable
+- **Health Check**: HTTP server on port 3000
+- **Exchange Rates**: Cached for 1 hour
 
 ## 🕒 Schedule
 
-- **23:00**: Reminder (if no spendings logged).
-- **23:50**: Monthly Report (only on the last day of the month).
-- **23:55**: Daily Report.
+- **23:00**: Reminder (if no spendings logged)
+- **23:50**: Monthly Report (last day of month)
+- **23:55**: Daily Report

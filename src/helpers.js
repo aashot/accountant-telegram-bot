@@ -26,15 +26,16 @@ function getCurrentMonth() {
 }
 
 function parseSpending(text) {
-  const match = text.match(/^(.+?)\s+([\d,]+)$/i);
+  const match = text.match(/^(.+?)\s+([\d,]+(?:\.\d+)?)\s*([A-Za-z]{3})?$/i);
   if (!match) return null;
 
   const category = match[1].trim().toLowerCase();
   const amount = Number(match[2].replace(/,/g, ''));
+  const currency = match[3] ? match[3].toUpperCase() : 'AMD';
 
   if (Number.isNaN(amount) || amount <= 0) return null;
 
-  return { category, amount };
+  return { category, amount, currency };
 }
 
 module.exports = { getToday, getCurrentMonth, parseSpending, getDateFromTimestamp };

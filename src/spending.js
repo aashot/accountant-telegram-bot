@@ -5,11 +5,15 @@ const { getToday, getCurrentMonth, getDateFromTimestamp } = require('./helpers')
 /**
  * Add a spending record.
  * @param {string} category - Spending category
- * @param {number} amount - Amount spent
+ * @param {number} amount - Amount spent (in AMD)
  * @param {number} messageId - Telegram message ID
  * @param {number} [messageDate] - Unix timestamp from the Telegram message (optional)
+ * @param {Object} [currencyInfo] - Original currency info if converted
+ * @param {number} [currencyInfo.originalAmount] - Original amount before conversion
+ * @param {string} [currencyInfo.originalCurrency] - Original currency code
+ * @param {number} [currencyInfo.rate] - Exchange rate used
  */
-function add(category, amount, messageId, messageDate) {
+function add(category, amount, messageId, messageDate, currencyInfo = null) {
   const data = loadData();
 
   if (messageId && data.monthly.some(e => e.messageId === messageId)) {
@@ -21,12 +25,20 @@ function add(category, amount, messageId, messageDate) {
   if (!data.daily[date]) data.daily[date] = {};
   data.daily[date][category] = (data.daily[date][category] || 0) + amount;
 
-  data.monthly.push({ date, category, amount, messageId });
+  const entry = { date, category, amount, messageId };
+
+  if (currencyInfo && currencyInfo.originalCurrency !== 'AMD') {
+    entry.originalAmount = currencyInfo.originalAmount;
+    entry.originalCurrency = currencyInfo.originalCurrency;
+    entry.exchangeRate = currencyInfo.rate;
+  }
+
+  data.monthly.push(entry);
 
   saveData(data);
 }
 
-function updateSpending(messageId, newCategory, newAmount) {
+function updateSpending(messageId, newCategory, newAmount, currencyInfo = null) {
   const data = loadData();
   const entry = data.monthly.find(e => e.messageId === messageId);
 
@@ -52,6 +64,16 @@ function updateSpending(messageId, newCategory, newAmount) {
 
   entry.category = newCategory;
   entry.amount = newAmount;
+
+  if (currencyInfo && currencyInfo.originalCurrency !== 'AMD') {
+    entry.originalAmount = currencyInfo.originalAmount;
+    entry.originalCurrency = currencyInfo.originalCurrency;
+    entry.exchangeRate = currencyInfo.rate;
+  } else {
+    delete entry.originalAmount;
+    delete entry.originalCurrency;
+    delete entry.exchangeRate;
+  }
 
   saveData(data);
   return true;
@@ -113,8 +135,41 @@ function getDailyData() {
     return null;
   }
 
+  const todayEntries = data.monthly.filter(e => e.date === today);
+
+  const categoryDetails = {};
+  todayEntries.forEach(entry => {
+    if (!categoryDetails[entry.category]) {
+      categoryDetails[entry.category] = [];
+    }
+    categoryDetails[entry.category].push({
+      amount: entry.amount,
+      originalAmount: entry.originalAmount,
+      originalCurrency: entry.originalCurrency
+    });
+  });
+
   const entries = Object.entries(todayData)
-    .map(([category, amount]) => ({ category, amount }))
+    .map(([category, amount]) => {
+      const details = categoryDetails[category] || [];
+      const foreignEntries = details.filter(d => d.originalCurrency && d.originalCurrency !== 'AMD');
+      let originalInfo = null;
+
+      if (foreignEntries.length > 0) {
+        const byCurrency = {};
+        foreignEntries.forEach(e => {
+          if (!byCurrency[e.originalCurrency]) {
+            byCurrency[e.originalCurrency] = 0;
+          }
+          byCurrency[e.originalCurrency] += e.originalAmount;
+        });
+        originalInfo = Object.entries(byCurrency)
+          .map(([curr, amt]) => `${amt.toLocaleString()} ${curr}`)
+          .join(' + ');
+      }
+
+      return { category, amount, originalInfo };
+    })
     .sort((a, b) => b.amount - a.amount);
 
   const total = entries.reduce((sum, e) => sum + e.amount, 0);
@@ -130,14 +185,23 @@ function getDailySummary() {
   }
 
   const header = `📊 *Spendings for ${dailyData.date}*\n\n`;
-  const tableHeader = '```\n' + padRight('Category', 20) + padRight('Amount', 12) + '\n';
-  const separator = '-'.repeat(32) + '\n';
+  const tableHeader = '```\n' + padRight('Category', 20) + padRight('Amount (AMD)', 15) + 'Original\n';
+  const separator = '-'.repeat(50) + '\n';
 
   const rows = dailyData.entries
-    .map(e => padRight(capitalize(e.category), 20) + padRight(e.amount.toLocaleString(), 12))
+    .map(e => {
+      const original = e.originalInfo ? `(${e.originalInfo})` : '';
+      return padRight(capitalize(e.category), 20) + padRight(e.amount.toLocaleString(), 15) + original;
+    })
     .join('\n');
 
-  const totalRow = '\n' + separator + padRight('TOTAL', 20) + padRight(dailyData.total.toLocaleString(), 12) + '```';
+  const allOriginals = dailyData.entries
+    .filter(e => e.originalInfo)
+    .map(e => e.originalInfo)
+    .join(' + ');
+
+  const totalOriginal = allOriginals ? `(${allOriginals})` : '';
+  const totalRow = '\n' + separator + padRight('TOTAL', 20) + padRight(dailyData.total.toLocaleString(), 15) + totalOriginal + '```';
 
   return header + tableHeader + separator + rows + totalRow;
 }
@@ -149,10 +213,14 @@ function getDailyCsv() {
     return null;
   }
 
-  const header = 'Category,Amount';
+  const header = 'Category,Amount (AMD),Original Amount,Original Currency';
   const rows = dailyData.entries
-    .map(e => `"${capitalize(e.category)}",${e.amount}`);
-  rows.push(`"TOTAL",${dailyData.total}`);
+    .map(e => {
+      const origAmt = e.originalInfo ? e.originalInfo.replace(/[^0-9,.+ ]/g, '').trim() : '';
+      const origCur = e.originalInfo ? e.originalInfo.replace(/[0-9,.+ ]/g, '').trim() : '';
+      return `"${capitalize(e.category)}",${e.amount},"${origAmt}","${origCur}"`;
+    });
+  rows.push(`"TOTAL",${dailyData.total},"",""`);
 
   return [header, ...rows].join('\n');
 }
@@ -174,17 +242,50 @@ function getMonthlySummary(month = getCurrentMonth()) {
   }
 
   const byCategory = {};
+  const originalsByCategory = {};
+
   monthlyEntries.forEach(e => {
     byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+
+    if (e.originalCurrency && e.originalCurrency !== 'AMD') {
+      if (!originalsByCategory[e.category]) {
+        originalsByCategory[e.category] = {};
+      }
+      const curr = e.originalCurrency;
+      originalsByCategory[e.category][curr] = (originalsByCategory[e.category][curr] || 0) + e.originalAmount;
+    }
   });
 
   const lines = [`📊 Monthly Report: ${month}`];
   Object.entries(byCategory)
     .sort((a, b) => b[1] - a[1])
-    .forEach(([cat, amt]) => lines.push(`• ${cat}: ${amt.toLocaleString()}`));
+    .forEach(([cat, amt]) => {
+      const originals = originalsByCategory[cat];
+      let originalStr = '';
+      if (originals) {
+        originalStr = ' (' + Object.entries(originals)
+          .map(([curr, origAmt]) => `${origAmt.toLocaleString()} ${curr}`)
+          .join(' + ') + ')';
+      }
+      lines.push(`• ${capitalize(cat)}: ${amt.toLocaleString()} AMD${originalStr}`);
+    });
 
   const total = monthlyEntries.reduce((sum, e) => sum + e.amount, 0);
-  lines.push(`\n💰 Total: ${total.toLocaleString()}`);
+  const totalOriginals = {};
+  monthlyEntries.forEach(e => {
+    if (e.originalCurrency && e.originalCurrency !== 'AMD') {
+      totalOriginals[e.originalCurrency] = (totalOriginals[e.originalCurrency] || 0) + e.originalAmount;
+    }
+  });
+
+  let totalOriginalStr = '';
+  if (Object.keys(totalOriginals).length > 0) {
+    totalOriginalStr = ' (' + Object.entries(totalOriginals)
+      .map(([curr, amt]) => `${amt.toLocaleString()} ${curr}`)
+      .join(' + ') + ')';
+  }
+
+  lines.push(`\n💰 Total: ${total.toLocaleString()} AMD${totalOriginalStr}`);
 
   return lines.join('\n');
 }
