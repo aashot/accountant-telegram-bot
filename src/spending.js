@@ -140,6 +140,8 @@ function getDailyData() {
   const todayEntries = data.monthly.filter(e => e.date === today);
 
   const categoryDetails = {};
+  const totalOriginalsByCurrency = {};
+
   todayEntries.forEach(entry => {
     if (!categoryDetails[entry.category]) {
       categoryDetails[entry.category] = [];
@@ -149,6 +151,13 @@ function getDailyData() {
       originalAmount: entry.originalAmount,
       originalCurrency: entry.originalCurrency
     });
+
+    if (entry.originalCurrency && entry.originalCurrency !== 'AMD') {
+      if (!totalOriginalsByCurrency[entry.originalCurrency]) {
+        totalOriginalsByCurrency[entry.originalCurrency] = 0;
+      }
+      totalOriginalsByCurrency[entry.originalCurrency] += entry.originalAmount;
+    }
   });
 
   const entries = Object.entries(todayData)
@@ -176,7 +185,14 @@ function getDailyData() {
 
   const total = entries.reduce((sum, e) => sum + e.amount, 0);
 
-  return { entries, total, date: today };
+  let totalOriginalsInfo = null;
+  if (Object.keys(totalOriginalsByCurrency).length > 0) {
+    totalOriginalsInfo = Object.entries(totalOriginalsByCurrency)
+      .map(([curr, amt]) => `${amt.toLocaleString()} ${curr}`)
+      .join(' + ');
+  }
+
+  return { entries, total, date: today, totalOriginalsInfo };
 }
 
 function getDailySummary() {
@@ -197,12 +213,9 @@ function getDailySummary() {
     })
     .join('\n');
 
-  const allOriginals = dailyData.entries
-    .filter(e => e.originalInfo)
-    .map(e => e.originalInfo)
-    .join(' + ');
-
-  const totalConversion = allOriginals ? `${allOriginals} → ${dailyData.total.toLocaleString()}` : '';
+  const totalConversion = dailyData.totalOriginalsInfo
+    ? `${dailyData.totalOriginalsInfo} → ${dailyData.total.toLocaleString()}`
+    : '';
   const totalRow = '\n' + separator + padRight('TOTAL', 14) + padRight(dailyData.total.toLocaleString(), 12) + totalConversion + '```';
 
   return header + tableHeader + separator + rows + totalRow;
