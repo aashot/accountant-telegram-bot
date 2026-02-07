@@ -5,15 +5,19 @@ const { getToday, getCurrentMonth, getDateFromTimestamp } = require('./helpers')
 /**
  * Add a spending record.
  * @param {string} customDate - Optional custom date (YYYY-MM-DD) for past entries
+ * @param {number} lineIndex - Optional line index for multi-line messages
  */
-async function add(category, amount, messageId, messageDate, currencyInfo = null, customDate = null) {
+async function add(category, amount, messageId, messageDate, currencyInfo = null, customDate = null, lineIndex = null) {
   const spendings = getSpendings();
   const date = customDate || (messageDate ? getDateFromTimestamp(messageDate) : getToday());
 
   if (messageId) {
-    const existing = await spendings.findOne({ messageId });
+    const query = lineIndex !== null
+      ? { messageId, lineIndex }
+      : { messageId };
+    const existing = await spendings.findOne(query);
     if (existing) {
-      console.log(`[SKIP] Duplicate messageId ${messageId} for ${category}`);
+      console.log(`[SKIP] Duplicate messageId ${messageId} (lineIndex: ${lineIndex}) for ${category}`);
       return;
     }
   }
@@ -23,6 +27,7 @@ async function add(category, amount, messageId, messageDate, currencyInfo = null
     category,
     amount,
     messageId,
+    lineIndex,
     createdAt: new Date()
   };
 
@@ -33,7 +38,7 @@ async function add(category, amount, messageId, messageDate, currencyInfo = null
   }
 
   await spendings.insertOne(entry);
-  console.log(`[ADDED] ${category}: ${amount} AMD (messageId: ${messageId}, date: ${date})`);
+  console.log(`[ADDED] ${category}: ${amount} AMD (messageId: ${messageId}, lineIndex: ${lineIndex}, date: ${date})`);
 }
 
 async function updateSpending(messageId, newCategory, newAmount, currencyInfo = null) {
@@ -67,14 +72,23 @@ async function removeSpending(messageId) {
   return result.deletedCount > 0;
 }
 
+/**
+ * Remove all spending entries for a given messageId (for multi-line edits)
+ */
+async function removeAllByMessageId(messageId) {
+  const spendings = getSpendings();
+  const result = await spendings.deleteMany({ messageId });
+  return result.deletedCount;
+}
+
 async function resetDay() {
   const spendings = getSpendings();
   const today = getToday();
 
   const todayEntries = await spendings.find({ date: today, messageId: { $ne: null } }).toArray();
-  const messageIds = todayEntries.map(e => e.messageId);
+  const uniqueMessageIds = [...new Set(todayEntries.map(e => e.messageId))];
 
-  const deletePromises = messageIds.map(msgId =>
+  const deletePromises = uniqueMessageIds.map(msgId =>
     bot.deleteMessage(channelId, msgId).catch(err => {
       console.log(`Could not delete message ${msgId}: ${err.message}`);
     })
@@ -83,7 +97,7 @@ async function resetDay() {
 
   await spendings.deleteMany({ date: today });
 
-  return messageIds.length;
+  return uniqueMessageIds.length;
 }
 
 async function getDailyData() {
@@ -280,6 +294,7 @@ module.exports = {
   add,
   updateSpending,
   removeSpending,
+  removeAllByMessageId,
   resetDay,
   getDailySummary,
   getDailyCsv,

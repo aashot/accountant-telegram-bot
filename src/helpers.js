@@ -38,4 +38,24 @@ function parseSpending(text) {
   return { category, amount, currency };
 }
 
-module.exports = { getToday, getCurrentMonth, parseSpending, getDateFromTimestamp };
+/**
+ * Parse multiple spending entries from a multi-line message.
+ * Each line is parsed separately.
+ * @param {string} text - Multi-line text input
+ * @returns {Array<{category: string, amount: number, currency: string, lineIndex: number}>}
+ */
+function parseSpendings(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const results = [];
+
+  lines.forEach((line, index) => {
+    const spending = parseSpending(line);
+    if (spending) {
+      results.push({ ...spending, lineIndex: index });
+    }
+  });
+
+  return results;
+}
+
+module.exports = { getToday, getCurrentMonth, parseSpending, parseSpendings, getDateFromTimestamp };

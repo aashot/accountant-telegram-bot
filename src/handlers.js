@@ -1,10 +1,11 @@
 const { bot, channelId } = require('./config');
-const { parseSpending, getToday } = require('./helpers');
+const { parseSpending, parseSpendings, getToday } = require('./helpers');
 const { convertToAMD, isSupportedCurrency } = require('./currency');
 const {
   add,
   updateSpending,
   removeSpending,
+  removeAllByMessageId,
   resetDay,
   getDailySummary,
   getDailyCsv,
@@ -37,7 +38,13 @@ All amounts auto-convert to AMD.
 
 ✏️ *Edit/Delete:*
 Edit a message to update the amount.
-Edit to invalid text (e.g., "-") to delete.`;
+Edit to invalid text (e.g., "-") to delete.
+
+📝 *Multi-line support:*
+Send multiple expenses in one message:
+\`Coffee 500
+Lunch 3500
+Transport 10 USD\``;
 
 function setupHandlers() {
   bot.on('channel_post', async msg => {
@@ -121,29 +128,79 @@ function setupHandlers() {
         return bot.sendMessage(channelId, `✅ Added to ${date}: ${category} ${amountAMD.toLocaleString()} AMD${conversionNote}`, { reply_to_message_id: msg.message_id });
       }
 
-      const spending = parseSpending(text);
-      if (spending) {
-        console.log(`[PARSE] "${text}" -> category: ${spending.category}, amount: ${spending.amount}, currency: ${spending.currency}`);
+      const addPastMultiMatch = text.match(/^\/add-past(?:@\w+)?\s+(\d{4}-\d{2}-\d{2})\s*\n([\s\S]+)$/i);
+      if (addPastMultiMatch) {
+        const [, date, linesText] = addPastMultiMatch;
 
-        if (!isSupportedCurrency(spending.currency)) {
-          return bot.sendMessage(channelId, `❌ Invalid currency code "${spending.currency}". Use a valid 3-letter code (USD, EUR, BTC, etc.)`, { reply_to_message_id: msg.message_id });
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return bot.sendMessage(channelId, '❌ Invalid date format. Use YYYY-MM-DD', { reply_to_message_id: msg.message_id });
         }
 
-        const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
-        console.log(`[CONVERT] ${spending.amount} ${spending.currency} -> ${amountAMD} AMD (success: ${success})`);
-
-        if (!success && spending.currency !== 'AMD') {
-          return bot.sendMessage(channelId, `⚠️ Could not convert ${spending.currency}. Please try again later.`, { reply_to_message_id: msg.message_id });
+        const spendings = parseSpendings(linesText);
+        if (spendings.length === 0) {
+          return bot.sendMessage(channelId, '❌ No valid expenses found', { reply_to_message_id: msg.message_id });
         }
 
-        await add(spending.category, amountAMD, msg.message_id, msg.date, {
-          originalAmount: spending.amount,
-          originalCurrency: spending.currency,
-          rate
-        });
+        const results = [];
+        for (const spending of spendings) {
+          if (!isSupportedCurrency(spending.currency)) {
+            results.push(`❌ ${spending.category}: Invalid currency "${spending.currency}"`);
+            continue;
+          }
 
-        if (spending.currency !== 'AMD' && success) {
-          await bot.sendMessage(channelId, `💱 ${spending.amount.toLocaleString()} ${spending.currency} → ${amountAMD.toLocaleString()} AMD`, { reply_to_message_id: msg.message_id });
+          const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+
+          if (!success && spending.currency !== 'AMD') {
+            results.push(`⚠️ ${spending.category}: Could not convert ${spending.currency}`);
+            continue;
+          }
+
+          await add(spending.category, amountAMD, null, null, {
+            originalAmount: spending.amount,
+            originalCurrency: spending.currency,
+            rate
+          }, date);
+
+          const conversionNote = spending.currency !== 'AMD' ? ` (${spending.amount} ${spending.currency} → ${amountAMD.toLocaleString()} AMD)` : '';
+          results.push(`✅ ${spending.category}: ${amountAMD.toLocaleString()} AMD${conversionNote}`);
+        }
+
+        return bot.sendMessage(channelId, `📅 Added to ${date}:\n${results.join('\n')}`, { reply_to_message_id: msg.message_id });
+      }
+
+      const spendings = parseSpendings(text);
+      if (spendings.length > 0) {
+        const conversions = [];
+
+        for (const spending of spendings) {
+          console.log(`[PARSE] line ${spending.lineIndex}: "${spending.category}" -> amount: ${spending.amount}, currency: ${spending.currency}`);
+
+          if (!isSupportedCurrency(spending.currency)) {
+            await bot.sendMessage(channelId, `❌ Invalid currency code "${spending.currency}" on line ${spending.lineIndex + 1}. Use a valid 3-letter code.`, { reply_to_message_id: msg.message_id });
+            continue;
+          }
+
+          const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+          console.log(`[CONVERT] ${spending.amount} ${spending.currency} -> ${amountAMD} AMD (success: ${success})`);
+
+          if (!success && spending.currency !== 'AMD') {
+            await bot.sendMessage(channelId, `⚠️ Could not convert ${spending.currency}. Please try again later.`, { reply_to_message_id: msg.message_id });
+            continue;
+          }
+
+          await add(spending.category, amountAMD, msg.message_id, msg.date, {
+            originalAmount: spending.amount,
+            originalCurrency: spending.currency,
+            rate
+          }, null, spending.lineIndex);
+
+          if (spending.currency !== 'AMD' && success) {
+            conversions.push(`💱 ${spending.amount.toLocaleString()} ${spending.currency} → ${amountAMD.toLocaleString()} AMD`);
+          }
+        }
+
+        if (conversions.length > 0) {
+          await bot.sendMessage(channelId, conversions.join('\n'), { reply_to_message_id: msg.message_id });
         }
       }
     } catch (error) {
@@ -176,38 +233,35 @@ function setupHandlers() {
     try {
       if (String(msg.chat.id) !== String(channelId) || !msg.text) return;
 
-      const spending = parseSpending(msg.text.trim());
+      const text = msg.text.trim();
+      const spendings = parseSpendings(text);
 
-      if (!spending) {
-        const removed = await removeSpending(msg.message_id);
-        if (removed) {
+      if (spendings.length === 0) {
+        const removed = await removeAllByMessageId(msg.message_id);
+        if (removed > 0) {
           await bot.deleteMessage(channelId, msg.message_id).catch(() => { });
         }
         return;
       }
 
-      if (!isSupportedCurrency(spending.currency)) {
-        return;
-      }
+      await removeAllByMessageId(msg.message_id);
 
-      const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
+      for (const spending of spendings) {
+        if (!isSupportedCurrency(spending.currency)) {
+          continue;
+        }
 
-      if (!success && spending.currency !== 'AMD') {
-        return;
-      }
+        const { amountAMD, rate, success } = await convertToAMD(spending.amount, spending.currency);
 
-      const updated = await updateSpending(msg.message_id, spending.category, amountAMD, {
-        originalAmount: spending.amount,
-        originalCurrency: spending.currency,
-        rate
-      });
+        if (!success && spending.currency !== 'AMD') {
+          continue;
+        }
 
-      if (!updated) {
         await add(spending.category, amountAMD, msg.message_id, msg.date, {
           originalAmount: spending.amount,
           originalCurrency: spending.currency,
           rate
-        });
+        }, null, spending.lineIndex);
       }
     } catch (error) {
       console.error('Error handling edited_channel_post:', error.message);
