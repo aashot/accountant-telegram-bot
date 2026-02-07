@@ -6,22 +6,43 @@ const DB_NAME = 'accountant_bot';
 let client = null;
 let db = null;
 
-async function connect() {
+async function connect(retries = 3) {
   if (db) return db;
 
   if (!MONGODB_URI) {
     throw new Error('MONGODB_URI environment variable is not set');
   }
 
-  client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  db = client.db(DB_NAME);
+  const options = {
+    tls: true,
+    tlsAllowInvalidCertificates: false,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+  };
 
-  await db.collection('spendings').createIndex({ messageId: 1 }, { unique: true, sparse: true });
-  await db.collection('spendings').createIndex({ date: 1 });
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔄 MongoDB connection attempt ${attempt}/${retries}...`);
+      client = new MongoClient(MONGODB_URI, options);
+      await client.connect();
+      db = client.db(DB_NAME);
 
-  console.log('✅ Connected to MongoDB');
-  return db;
+      await db.collection('spendings').createIndex({ messageId: 1 }, { unique: true, sparse: true });
+      await db.collection('spendings').createIndex({ date: 1 });
+
+      console.log('✅ Connected to MongoDB');
+      return db;
+    } catch (error) {
+      console.error(`❌ MongoDB connection attempt ${attempt} failed:`, error.message);
+      if (attempt < retries) {
+        const delay = attempt * 2000;
+        console.log(`⏳ Retrying in ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
 }
 
 function getDb() {
