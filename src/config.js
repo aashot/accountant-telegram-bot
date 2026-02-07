@@ -21,7 +21,7 @@ if (!token || !channelId) {
   process.exit(1);
 }
 
-const bot = new TelegramBot(token, { webHook: true });
+const bot = new TelegramBot(token);
 const DATA_FILE = path.join(__dirname, '..', 'data.json');
 
 module.exports = { bot, channelId, DATA_FILE, token, WEBHOOK_URL };
