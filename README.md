@@ -62,7 +62,7 @@ npm run dev    # Development (with hot reload)
 
 | Command | Description |
 |---------|-------------|
-| `/total` | Today's summary (table + CSV file) |
+| `/total [YYYY-MM-DD]` | Summary for today or a specific date (table + CSV file) |
 | `/monthly-total` | Current month's summary |
 | `/reset-day` | Wipe today's data (with confirmation) |
 | `/help` | Show help message |
@@ -86,6 +86,11 @@ Category Amount [Currency]
 Coffee 500
 Lunch 3500
 Transport 10 USD
+```
+
+**Add past expense (single line):**
+```
+/add-past 2026-02-07 lunch 5000
 ```
 
 **Add past expenses (multi-line):**
